@@ -1,0 +1,9 @@
+# Upgrade these together after a Windows smoke test. The PyPI wheel includes WebUI assets.
+-c constraints.txt
+pixlstash==2.0.1
+torch==2.12.1
+torchvision==0.27.1
+# 0.7.3 requires a native compiler on Windows. 2.1 ships a pure Python wheel.
+insightface==2.1
+onnxruntime==1.27.0
+platformdirs==4.14.5

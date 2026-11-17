@@ -1,0 +1,9 @@
+env/
+data/
+cache/
+.upstream/
+.runtime/
+.tools/
+.test-data/
+__pycache__/
+*.pyc
