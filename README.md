@@ -12,7 +12,7 @@ The first install downloads a private, managed Python 3.12 and the Python depend
 
 The server listens on `127.0.0.1`, normally port `9537`. If the configured port is occupied, Start selects an available port, saves it, and supplies the actual WebUI link after the PixlStash API and HTML both respond.
 
-If startup ends early, look for `PIXLSTASH_FATAL` in the Start log. It identifies an initialization failure, a readiness timeout after about 15 minutes, or an unexpected server exit. The preceding log preserves the application's warnings, model download progress, and error details.
+If startup ends early or the server exits unexpectedly, Pinokio returns to the stopped menu. Look for `PIXLSTASH_FATAL` in the Start log for the failure category. Readiness times out after about 15 minutes. The preceding log preserves the application's warnings, model download progress, and error details.
 
 ## Stop, update and repair
 

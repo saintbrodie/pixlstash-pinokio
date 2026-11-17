@@ -38,7 +38,7 @@ test("mutating actions hide competing actions while working", async () => {
 });
 
 test("readiness only matches the verified loopback URL, not download URLs", () => {
-  const { event } = start.run[0].params.on.find(handler => handler.done);
+  const { event } = start.run[0].params.on.find(handler => handler.event.includes("PIXLSTASH_READY"));
   const regex = new RegExp(event.slice(1, -1));
   assert.equal(regex.exec("Downloading https://huggingface.co/models"), null);
   assert.equal(regex.exec("uvicorn.error: Uvicorn running on http://127.0.0.1:9537\n"), null);
@@ -47,7 +47,7 @@ test("readiness only matches the verified loopback URL, not download URLs", () =
   assert.equal(start.run[1].params.url, "{{input.event[1]}}");
 });
 
-test("Pinokio ignores generic server logs but stops for the launcher's fatal signal", () => {
+test("Pinokio ignores generic server logs and routes fatal signals to cleanup", () => {
   const handlers = start.run[0].params.on;
   const pattern = ({ event }) => {
     const end = event.lastIndexOf("/");
@@ -59,12 +59,41 @@ test("Pinokio ignores generic server logs but stops for the launcher's fatal sig
     for (const handler of handlers.filter(handler => handler.break === false)) {
       text = text.replace(pattern(handler), "");
     }
-    return /error:|errno /i.test(text) || handlers.some(handler => handler.break && pattern(handler).test(text));
+    return /error:|errno /i.test(text) || handlers.some(handler => handler.done && pattern(handler).test(text));
   }
   assert.equal(fatal("INFO: uvicorn.error: Uvicorn running on http://127.0.0.1:9537"), false);
   assert.equal(fatal("WARNING: model download retry after OSError: [Errno 10060]"), false);
   assert.equal(fatal("Traceback (most recent call last):\nRuntimeError: bad config\nPIXLSTASH_FATAL: Initialization failed"), true);
   assert.equal(fatal("PIXLSTASH_FATAL: WebUI readiness timed out"), true);
+});
+
+test("daemon state is cleared when the Pinokio shell exits", async () => {
+  const id = path.resolve(__dirname, "../start.js");
+  const stopShellId = start.on.stop.params.id;
+  let checks = 0;
+  let stopping = false;
+  const stopped = [];
+  const kernel = {
+    memory: { local: { [id]: { url: "http://127.0.0.1:9537" } } },
+    shell: { get: shellId => {
+      if (shellId === stopShellId) return stopping;
+      assert.equal(shellId, "test-shell");
+      return checks++ === 0;
+    } },
+    api: { stop: request => {
+      assert.equal(kernel.memory.local[id].url, undefined);
+      stopped.push(request.params.id);
+    } }
+  };
+  const finish = start.run[2].method;
+  await finish({ params: { shellId: "test-shell" }, parent: { id } }, null, kernel);
+  assert.equal(checks, 2);
+  await finish({ params: { shellId: "" }, parent: { path: id } }, null, kernel);
+  assert.deepEqual(stopped, [id, id]);
+  stopping = true;
+  checks = 0;
+  await finish({ params: { shellId: "test-shell" }, parent: { id } }, null, kernel);
+  assert.deepEqual(stopped, [id, id]);
 });
 
 test("stop targets this launcher's absolute path, including on Pinokio 8.3.7", async () => {

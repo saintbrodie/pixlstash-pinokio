@@ -7,10 +7,11 @@ Pinokio 8.3.7 injects `/error:/i` and `/errno /i` break handlers in its bundled 
 | Windows 11, Pinokio 8.3.7, PixlStash 2.0.1 | Started through `pterm` with the existing managed Python 3.12 CPU installation. The normal Uvicorn INFO line remained in the log. |
 | Running sidebar and sustained uptime | Pinokio reported an online server and rendered **Open WebUI**, **Server Log**, and **Stop**. The actual URL responded to HTTP after more than 60 seconds. |
 | Stop and restart | Ran the launcher’s Stop script through Pinokio. The server logged `Application shutdown complete` and `PixlStash shut down on request`. Pinokio returned to the stopped menu, and both the server process and listener exited. A subsequent Pinokio launch served the WebUI again. |
+| Controlled failures through Pinokio | A disposable startup fixture logged a fatal diagnostic without publishing a URL. A second fixture reached readiness and then exited unexpectedly. The launcher cleared Pinokio's daemon state and its saved URL. |
 | Regression suites | JavaScript and Python tests cover menu states, Uvicorn logs, fatal output, HTTP readiness, port fallback, readiness timeout, and unexpected returns from the server. |
 | Isolated smoke | Real WebUI and assets, account registration, automatic port fallback, and cooperative shutdown with a disposable library and cache. |
 
-Fatal startup and unexpected-exit cases were exercised by the regression suites using controlled failures. The live Pinokio test used the existing CPU installation.
+Live PixlStash testing used the existing CPU installation. The controlled failure fixtures ran through the installed Pinokio runtime with the same event handlers and cleanup steps.
 
 ## Earlier installer verification — November 16, 2026
 
