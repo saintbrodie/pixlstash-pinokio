@@ -10,13 +10,18 @@ module.exports = {
     }
     if (info.running("start.js")) {
       const local = info.local("start.js");
+      const stop = { icon: "fa-solid fa-stop", text: "Stop", href: "stop.js" };
+      if (!local?.url) return [
+        { default: true, icon: "fa-solid fa-spinner", text: "Starting PixlStash — view progress", href: "start.js" },
+        stop
+      ];
       return [
-        ...(local && local.url ? [{ default: true, icon: "fa-solid fa-globe", text: "Open WebUI", href: local.url }] : []),
-        { icon: "fa-solid fa-terminal", text: "Server log", href: "start.js" },
-        { icon: "fa-solid fa-stop", text: "Stop", href: "stop.js" }
+        { default: true, icon: "fa-solid fa-globe", text: "Open WebUI", href: local.url },
+        { icon: "fa-solid fa-terminal", text: "Server Log", href: "start.js" },
+        stop
       ];
     }
-    if (!info.exists("env", "pixlstash-installed.json")) return [
+    if (!info.exists("env/pixlstash-installed.json")) return [
       { default: true, icon: "fa-solid fa-download", text: "Install PixlStash (CPU)", href: "install.js" }
     ];
     return [

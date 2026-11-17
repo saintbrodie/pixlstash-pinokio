@@ -1,6 +1,7 @@
 """Isolated PixlStash setup and foreground server, called by Pinokio's Python 3.12 venv."""
 from __future__ import annotations
 
+import _thread
 import argparse
 from contextlib import contextmanager
 import importlib.metadata
@@ -9,13 +10,15 @@ import os
 from pathlib import Path
 import runpy
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import threading
 import time
-import urllib.error
+import traceback
 import urllib.request
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -23,6 +26,9 @@ CONFIG = DATA / "server-config.json"
 MARKER = ROOT / "env" / "pixlstash-installed.json"
 TORCH_VERSION = "2.12.1"
 VISION_VERSION = "0.27.1"
+READINESS_TIMEOUT = 900
+# scripts/run.js leaves this exit status to the diagnostic already printed here.
+SERVER_FAILURE = 70
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -184,22 +190,69 @@ def available_port(preferred: int) -> int:
         return sock.getsockname()[1]
 
 
-def report_ready(port: int) -> None:
+def report_fatal(message: str) -> None:
+    print(f"\nPIXLSTASH_FATAL: {message}", file=sys.stderr, flush=True)
+
+
+def webui_responds(opener, url: str) -> bool:
+    try:
+        with opener.open(url + "/version", timeout=3) as response:
+            version = json.load(response)
+            if not isinstance(version, dict) or version.get("message") != "PixlStash REST API":
+                return False
+        with opener.open(url + "/", timeout=3) as response:
+            return response.status == 200 and b"<html" in response.read().lower()
+    except (OSError, ValueError):
+        return False
+
+
+def watch_server(
+    port: int, stop_file: Path, finished: threading.Event, ready: threading.Event,
+    stopping: threading.Event, timed_out: threading.Event,
+) -> None:
     url = f"http://127.0.0.1:{port}"
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    deadline = time.monotonic() + 900
-    while time.monotonic() < deadline:
-        try:
-            with opener.open(url + "/version", timeout=3) as response:
-                json.load(response)
-            with opener.open(url + "/", timeout=3) as response:
-                if response.status == 200 and b"<html" in response.read().lower():
-                    print(f"\nPIXLSTASH_READY={url}", flush=True)
+    deadline = time.monotonic() + READINESS_TIMEOUT
+    while not finished.is_set():
+        if stop_file.exists():
+            stopping.set()
+            # Deliver Ctrl+C to the foreground Python code. Uvicorn handles it
+            # on the main thread and runs its normal shutdown and DB cleanup.
+            _thread.interrupt_main()
+            return
+        if not ready.is_set():
+            if time.monotonic() >= deadline:
+                timed_out.set()
+                report_fatal("WebUI readiness timed out. Check the server log and model download progress.")
+                _thread.interrupt_main()
+                return
+            if webui_responds(opener, url) and not finished.is_set() and not stop_file.exists():
+                ready.set()
+                print(f"\nPIXLSTASH_READY={url}", flush=True)
+        finished.wait(0.5)
+
+
+def stop_server() -> None:
+    active = DATA / "server-session.json"
+    try:
+        session = json.loads(active.read_text(encoding="utf-8"))["id"]
+    except FileNotFoundError:
+        return
+    # Scope each request to the instance that was running when Stop was clicked.
+    stop_file = DATA / f"server-stop-{session}"
+    stop_file.touch()
+    try:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            try:
+                if json.loads(active.read_text(encoding="utf-8"))["id"] != session:
                     return
-        except (OSError, ValueError, urllib.error.URLError):
-            pass
-        time.sleep(1)
-    print("WebUI did not become ready within 15 minutes. Check the server log and model downloads.", file=sys.stderr, flush=True)
+            except FileNotFoundError:
+                return
+            time.sleep(0.25)
+        print("PixlStash did not finish shutting down in 20 seconds. Pinokio will stop the shell.", flush=True)
+    finally:
+        stop_file.unlink(missing_ok=True)
 
 
 def serve() -> None:
@@ -214,21 +267,70 @@ def serve() -> None:
         write_json(CONFIG, config)
     os.environ["PIXLSTASH_PORT"] = str(port)
     os.environ["PIXLSTASH_DEFAULT_DEVICE"] = "cuda" if selected_backend() == "nvidia" else "cpu"
-    threading.Thread(target=report_ready, args=(port,), daemon=True).start()
     print(f"Starting PixlStash on loopback port {port}. First launch may download AI models.", flush=True)
-    # Run in the foreground so Pinokio owns the server process and can stop its tree.
-    sys.argv = ["pixlstash-server", "--server-config", str(CONFIG)]
-    runpy.run_module("pixlstash.app", run_name="__main__")
+    active = DATA / "server-session.json"
+    session = uuid4().hex
+    stop_file = DATA / f"server-stop-{session}"
+    write_json(active, {"id": session})
+    finished = threading.Event()
+    ready = threading.Event()
+    stopping = threading.Event()
+    timed_out = threading.Event()
+
+    def interrupt(_signal, _frame):
+        if not finished.is_set():
+            if not timed_out.is_set():
+                stopping.set()
+            raise KeyboardInterrupt
+
+    signals = [signal.SIGINT]
+    if os.name == "nt":
+        signals.append(signal.SIGBREAK)
+    previous_handlers = {sig: signal.signal(sig, interrupt) for sig in signals}
+    watcher = threading.Thread(
+        target=watch_server, args=(port, stop_file, finished, ready, stopping, timed_out), daemon=True,
+    )
+    try:
+        watcher.start()
+        # Keep PixlStash in the foreground so Pinokio still owns the process tree.
+        sys.argv = ["pixlstash-server", "--server-config", str(CONFIG)]
+        runpy.run_module("pixlstash.app", run_name="__main__")
+        status = 0
+    except SystemExit as exc:
+        status = exc.code
+    except KeyboardInterrupt:
+        status = 0
+    except Exception:
+        traceback.print_exc()
+        status = 1
+    finally:
+        finished.set()
+        if watcher.ident is not None:
+            watcher.join()
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
+        active.unlink(missing_ok=True)
+
+    if timed_out.is_set():
+        raise SystemExit(SERVER_FAILURE)
+    if stopping.is_set() and status in (None, 0):
+        print("PixlStash shut down on request.", flush=True)
+        return
+    phase = "server exited unexpectedly" if ready.is_set() else "initialization failed before the WebUI was ready"
+    report_fatal(f"PixlStash {phase} (exit status {status!r}). See the preceding server log.")
+    raise SystemExit(SERVER_FAILURE)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["install", "serve", "verify", "prepare", "update-code"])
+    parser.add_argument("action", choices=["install", "serve", "stop-server", "verify", "prepare", "update-code"])
     parser.add_argument("--backend", choices=["cpu", "nvidia"])
     args = parser.parse_args()
     environment()
     if args.action == "verify":
         verify(args.backend or selected_backend())
+    elif args.action == "stop-server":
+        stop_server()
     else:
         with lifecycle_lock():
             if args.action == "install":
@@ -242,8 +344,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    serving = sys.argv[1:2] == ["serve"]
     try:
         main()
     except Exception as exc:
+        if serving:
+            traceback.print_exc()
+            report_fatal(f"PixlStash initialization failed. {exc}")
+            raise SystemExit(SERVER_FAILURE)
         print(f"PIXLSTASH_ERROR: {exc}", file=sys.stderr, flush=True)
         raise
