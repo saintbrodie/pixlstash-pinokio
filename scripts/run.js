@@ -6,13 +6,29 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const python = path.join(root, "env", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 const args = process.argv.slice(2);
-const env = {
-  ...process.env,
-  PYTHONNOUSERSITE: "1", PYTHONUTF8: "1", PYTHONUNBUFFERED: "1",
-  PYTHONHOME: "", PYTHONPATH: "",
-  UV_CACHE_DIR: path.join(root, "cache", "uv"),
-  UV_PYTHON_INSTALL_DIR: path.join(root, "cache", "python")
-};
+
+function isolatedEnvironment(parent = process.env) {
+  const env = {
+    ...parent,
+    PYTHONNOUSERSITE: "1", PYTHONUTF8: "1", PYTHONUNBUFFERED: "1",
+    PYTHONHOME: "", PYTHONPATH: "",
+    UV_CACHE_DIR: path.join(root, "cache", "uv"),
+    UV_PYTHON_INSTALL_DIR: path.join(root, "cache", "python"),
+    // Pinokio may set UV_PYTHON_PREFERENCE. Use a single, explicit preference
+    // instead of combining it with uv's conflicting --managed-python switch.
+    UV_PYTHON_PREFERENCE: "only-managed"
+  };
+  // These boolean uv switches conflict with UV_PYTHON_PREFERENCE if inherited.
+  delete env.UV_MANAGED_PYTHON;
+  delete env.UV_NO_MANAGED_PYTHON;
+  return env;
+}
+
+function venvArgs() {
+  return ["venv", path.join(root, "env"), "--python", "3.12"];
+}
+
+const env = isolatedEnvironment();
 
 function run(command, argv) {
   return new Promise((resolve, reject) => {
@@ -25,14 +41,20 @@ function run(command, argv) {
   });
 }
 
-(async () => {
+async function main() {
   if (!fs.existsSync(python)) {
     if (args[0] !== "install") throw new Error("Install PixlStash first.");
-    // Request managed Python, rather than inheriting a user's Conda or system Python.
-    await run("uv", ["venv", path.join(root, "env"), "--python", "3.12", "--managed-python"]);
+    // A private uv-managed Python 3.12, never Pinokio's Conda/system interpreter.
+    await run("uv", venvArgs());
   }
   await run(python, ["-s", "-u", path.join(root, "scripts", "manage.py"), ...args]);
-})().catch(error => {
-  console.error(`PIXLSTASH_ERROR: ${error.message}`);
-  process.exitCode = 1;
-});
+}
+
+if (require.main === module) {
+  main().catch(error => {
+    console.error(`PIXLSTASH_ERROR: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { isolatedEnvironment, venvArgs };
