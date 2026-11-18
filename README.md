@@ -4,8 +4,10 @@ Windows-first Pinokio launcher for [PixlStash](https://github.com/Pikselkroken/p
 
 ## Install and run
 
+Choose a launcher action to run it. Opening PixlStash in Pinokio leaves installation and startup under your control.
+
 1. In Pinokio, choose **Download** and enter `https://github.com/saintbrodie/pixlstash-pinokio`.
-2. Open the downloaded app and choose **Install PixlStash (CPU)**. Allow Pinokio to install its required tools if prompted. This launcher needs Pinokio's Node and uv tools.
+2. Open the downloaded app and choose **Install PixlStash (CPU)** or **Install PixlStash (NVIDIA CUDA 13)**. Allow Pinokio to install its required Node and uv tools if prompted.
 3. Choose **Start** to see startup progress. When **Open WebUI** appears, open it and complete PixlStash's initial account setup.
 
 The first install downloads a private, managed Python 3.12 and the Python dependencies. First startup/inference can also download several GB of AI models and take time. Internet access and sufficient free disk space are required. Windows x64 is the validated target; macOS, Linux, AMD and Intel GPU acceleration have not been validated.
@@ -47,7 +49,7 @@ with urlopen("http://127.0.0.1:9537/version") as response:
 
 ## NVIDIA acceleration (optional)
 
-After the CPU installation, choose **Enable NVIDIA (CUDA 13)**, then Start. This downloads the larger PyTorch CUDA wheels and verifies an actual CUDA tensor operation before declaring installation complete. Requires an NVIDIA GPU and a working **580-series or newer** NVIDIA driver. Install an appropriate current driver for your GPU; no separate CUDA Toolkit is required. The launcher never installs or changes GPU drivers.
+Choose **Install PixlStash (NVIDIA CUDA 13)** during setup, or **Enable NVIDIA (CUDA 13)** from an existing installation. Then choose **Start**. NVIDIA setup downloads the larger PyTorch CUDA wheels and verifies a CUDA tensor operation before declaring installation complete. It requires an NVIDIA GPU and a working **580-series or newer** NVIDIA driver. The launcher uses your installed GPU driver and the CUDA libraries in PyTorch.
 
 PyTorch-based inference uses NVIDIA acceleration. ONNX Runtime remains the CPU distribution, so ONNX face processing uses CPU. The maintained PyTorch 2.12 wheels require CUDA 13; this launcher does not substitute incompatible CUDA 12.8 wheels. Choose CPU repair if your GPU/driver cannot run this backend. A failed driver preflight leaves the completed CPU installation intact; failures during package replacement require repair.
 

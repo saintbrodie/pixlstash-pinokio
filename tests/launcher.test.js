@@ -12,21 +12,29 @@ function info({ installed = false, running = [], url } = {}) {
   };
 }
 
-test("first run offers installation, completed installation offers all actions", async () => {
-  assert.equal((await launcher.menu({}, info()))[0].href, "install.js");
+test("first run offers manual CPU and NVIDIA setup", async () => {
+  const uninstalled = await launcher.menu({}, info());
+  assert.deepEqual(uninstalled.map(item => item.href), ["install.js", "nvidia.js"]);
+  assert.ok(uninstalled.every(item => !item.default));
+  assert.equal(require("../nvidia").run[1].params.message, "node scripts/run.js install --backend nvidia");
+});
+
+test("completed installation offers manual Start and maintenance actions", async () => {
   const stopped = await launcher.menu({}, info({ installed: true, url: "http://127.0.0.1:9537" }));
   assert.deepEqual(stopped.map(item => item.href), ["start.js", "update.js", "nvidia.js", "cpu.js"]);
+  assert.ok(stopped.every(item => !item.default));
 });
 
 test("starting has no WebUI link; readiness supplies captured URL and Stop", async () => {
   const starting = await launcher.menu({}, info({ installed: true, running: ["start.js"] }));
   assert.deepEqual(starting.map(item => item.href), ["start.js", "stop.js"]);
-  assert.equal(starting[0].default, true);
+  assert.ok(starting.every(item => !item.default));
   assert.match(starting[0].text, /Starting PixlStash/);
   const url = "http://127.0.0.1:49281";
   const online = await launcher.menu({}, info({ running: ["start.js"], url }));
   assert.deepEqual(online.map(item => item.href), [url, "start.js", "stop.js"]);
   assert.equal(online[0].default, true);
+  assert.ok(online.slice(1).every(item => !item.default));
 });
 
 test("mutating actions hide competing actions while working", async () => {
@@ -34,6 +42,7 @@ test("mutating actions hide competing actions while working", async () => {
     const menu = await launcher.menu({}, info({ installed: true, running: [script] }));
     assert.equal(menu.length, 1);
     assert.equal(menu[0].href, script);
+    assert.ok(!menu[0].default);
   }
 });
 
