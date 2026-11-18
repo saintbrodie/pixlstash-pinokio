@@ -1,4 +1,19 @@
-# Local verification — November 16, 2026
+# Startup lifecycle verification — November 17, 2026
+
+Pinokio 8.3.7 injects `/error:/i` and `/errno /i` break handlers in its bundled `kernel/shells.js`. It scans both the terminal stream and the response collected when the shell detaches. The failed Start reported `input.event = ["error:"]` immediately after the INFO line from the `uvicorn.error` logger. Pinokio stopped the script before the `local.set` step could record the WebUI URL.
+
+| Check | Result |
+| --- | --- |
+| Windows 11, Pinokio 8.3.7, PixlStash 2.0.1 | Started through `pterm` with the existing managed Python 3.12 CPU installation. The normal Uvicorn INFO line remained in the log. |
+| Running sidebar and sustained uptime | Pinokio reported an online server and rendered **Open WebUI**, **Server Log**, and **Stop**. The actual URL responded to HTTP after more than 60 seconds. |
+| Stop and restart | Ran the launcher’s Stop script through Pinokio. The server logged `Application shutdown complete` and `PixlStash shut down on request`. Pinokio returned to the stopped menu, and both the server process and listener exited. A subsequent Pinokio launch served the WebUI again. |
+| Controlled failures through Pinokio | A disposable startup fixture logged a fatal diagnostic without publishing a URL. A second fixture reached readiness and then exited unexpectedly. The launcher cleared Pinokio's daemon state and its saved URL. |
+| Regression suites | JavaScript and Python tests cover menu states, Uvicorn logs, fatal output, HTTP readiness, port fallback, readiness timeout, and unexpected returns from the server. |
+| Isolated smoke | Real WebUI and assets, account registration, automatic port fallback, and cooperative shutdown with a disposable library and cache. |
+
+Live PixlStash testing used the existing CPU installation. The controlled failure fixtures ran through the installed Pinokio runtime with the same event handlers and cleanup steps.
+
+## Earlier installer verification — November 16, 2026
 
 ## Environment inspected before implementation
 

@@ -6,19 +6,44 @@ Windows-first Pinokio launcher for [PixlStash](https://github.com/Pikselkroken/p
 
 1. In Pinokio, choose **Download** and enter `https://github.com/saintbrodie/pixlstash-pinokio`.
 2. Open the downloaded app and choose **Install PixlStash (CPU)**. Allow Pinokio to install its required tools if prompted. This launcher needs Pinokio's Node and uv tools.
-3. Choose **Start**, follow the server log, then choose **Open WebUI** when it appears. Complete PixlStash's initial account setup in the WebUI.
+3. Choose **Start** to see startup progress. When **Open WebUI** appears, open it and complete PixlStash's initial account setup.
 
 The first install downloads a private, managed Python 3.12 and the Python dependencies. First startup/inference can also download several GB of AI models and take time. Internet access and sufficient free disk space are required. Windows x64 is the validated target; macOS, Linux, AMD and Intel GPU acceleration have not been validated.
 
-The server listens on `127.0.0.1`, normally port `9537`. If the configured port is occupied, Start selects an available port, saves it, and supplies the actual WebUI link. Wait for **Open WebUI**; a download URL in the log does not count as readiness. The link is exposed only after the server API and HTML both respond.
+The server listens on `127.0.0.1`, normally port `9537`. If the configured port is occupied, Start selects an available port, saves it, and supplies the actual WebUI link after the PixlStash API and HTML both respond.
+
+If startup ends early or the server exits unexpectedly, Pinokio returns to the stopped menu. Look for `PIXLSTASH_FATAL` in the Start log for the failure category. Readiness times out after about 15 minutes. The preceding log preserves the application's warnings, model download progress, and error details.
 
 ## Stop, update and repair
 
-- **Stop** stops this launcher's foreground server through Pinokio. Pinokio's own script stop control is also available.
+- **Stop** asks the foreground server to shut down and close its databases. Pinokio stops the process tree if the server does not finish within 20 seconds.
 - **Update** stops the server, fast-forwards this launcher with `git pull --ff-only`, then installs the maintained, tested package versions. The selected CPU/NVIDIA backend is retained. Updates do not automatically start the server.
 - **Use CPU / repair installation** reinstalls the CPU backend and verifies the application. An interrupted install returns to the installation menu; run it again to repair.
 
 PixlStash is currently pinned to **2.0.1**. Updates adopt newer application releases when the launcher's requirements are updated and tested, rather than silently tracking untested PyPI releases. Local conflicting edits or diverged Git history cause Update to stop with an error. Logs remain available in Pinokio.
+
+To apply the startup fix to an existing installation, stop PixlStash and run `git pull --ff-only` from the downloaded launcher folder on its `main` branch. Then reload the app in Pinokio and select **Start**. This updates the launcher code with the existing Python environment, library, and models in place.
+
+## Check the server API
+
+Use the URL shown in **Open WebUI** in place of `http://127.0.0.1:9537` if Pinokio chose a different port. `GET /version` returns a JSON document with the PixlStash version.
+
+```powershell
+curl.exe http://127.0.0.1:9537/version
+```
+
+```javascript
+const response = await fetch("http://127.0.0.1:9537/version");
+console.log(await response.json());
+```
+
+```python
+import json
+from urllib.request import urlopen
+
+with urlopen("http://127.0.0.1:9537/version") as response:
+    print(json.load(response))
+```
 
 ## NVIDIA acceleration (optional)
 
@@ -46,13 +71,13 @@ Back up `data/` and any libraries stored elsewhere while the server is stopped b
 ## Development and verification
 
 ```powershell
-node --test tests/launcher.test.js
+node --test tests/launcher.test.js tests/uv-bootstrap.test.js
 python -m unittest discover -s tests -p 'test_*.py' -v
 # With uv on PATH:
 node scripts/run.js install --backend cpu
 env/Scripts/python.exe -s -u tests/smoke.py
 ```
 
-The smoke test uses a temporary library under `.test-data/`, disables background ML workers, tests an occupied port, fetches the real WebUI and its assets, checks first-run database creation, and stops the server. It never opens your actual library. A GitHub Actions Windows workflow performs the CPU installation and smoke test on each push/PR. See [TESTING.md](TESTING.md) for local results and limitations.
+The smoke test uses a temporary library under `.test-data/`, disables background ML workers, tests an occupied port, fetches the real WebUI and its assets, checks first-run database creation, and verifies that the Stop request closes the listener after a graceful shutdown. A GitHub Actions Windows workflow performs the CPU installation and smoke test on each push/PR. See [TESTING.md](TESTING.md) for local results and limitations.
 
 When upgrading dependencies, update `requirements.txt` and regenerate `constraints.txt` from a verified clean Windows environment, excluding the backend-specific torch/torchvision local versions. Retest CPU and NVIDIA; upstream's native dependencies and packaged frontend can change independently.

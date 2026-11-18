@@ -30,13 +30,19 @@ function venvArgs() {
 
 const env = isolatedEnvironment();
 
-function run(command, argv) {
+function run(command, argv, reportedFailureCode = -1) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, argv, { cwd: root, env, stdio: "inherit", windowsHide: true });
     child.once("error", reject);
     child.once("exit", (code, signal) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${path.basename(command)} exited with ${signal || code}`));
+      if (code === reportedFailureCode) {
+        process.exitCode = code;
+        resolve();
+      } else if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${path.basename(command)} exited with ${signal || code}`));
+      }
     });
   });
 }
@@ -47,12 +53,14 @@ async function main() {
     // A private uv-managed Python 3.12, never Pinokio's Conda/system interpreter.
     await run("uv", venvArgs());
   }
-  await run(python, ["-s", "-u", path.join(root, "scripts", "manage.py"), ...args]);
+  // manage.py has already reported the cause when the serve action exits with EX_SOFTWARE.
+  await run(python, ["-s", "-u", path.join(root, "scripts", "manage.py"), ...args], args[0] === "serve" ? 70 : -1);
 }
 
 if (require.main === module) {
   main().catch(error => {
-    console.error(`PIXLSTASH_ERROR: ${error.message}`);
+    const context = args[0] === "serve" ? "PIXLSTASH_FATAL: PixlStash process failed. " : "PIXLSTASH_ERROR: ";
+    console.error(`${context}${error.message}`);
     process.exitCode = 1;
   });
 }

@@ -18,16 +18,20 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def child(directory):
+def load_manager(directory):
     spec = importlib.util.spec_from_file_location("manage", ROOT / "scripts/manage.py")
     manage = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(manage)
+    manage.ROOT = directory
     manage.DATA = directory
     manage.CONFIG = directory / "server-config.json"
+    return manage
+
+
+def child(directory):
+    manage = load_manager(directory)
     manage.environment()
-    os.environ["PIXLSTASH_DEV_MACHINE"] = "1"
-    # Separate caches and defaults from both the production launcher and other installations.
-    os.environ["HOME"] = os.environ["USERPROFILE"] = str(directory)
+    os.environ["PIXLSTASH_TELEMETRY_DEV"] = "1"
     with manage.lifecycle_lock():
         manage.serve()
 
@@ -97,12 +101,14 @@ def run():
                         assert json.load(response)["needs_registration"] is False
                     print("PASS: first-run account registration through the WebUI API")
                     print("PASS: readiness, occupied port fallback, version, WebUI, assets, first-run database:", version)
-                    if os.name == "nt":
-                        process.send_signal(signal.CTRL_BREAK_EVENT)
-                    else:
-                        process.send_signal(signal.SIGINT)
+                    load_manager(directory).stop_server()
                     process.wait(timeout=45)
-                    print("PASS: server stopped; exit code", process.returncode)
+                    stopped_log = log.read_text(encoding="utf-8", errors="replace")
+                    assert process.returncode == 0, stopped_log
+                    assert "Application shutdown complete" in stopped_log, stopped_log
+                    assert "PixlStash shut down on request." in stopped_log, stopped_log
+                    assert "PIXLSTASH_FATAL:" not in stopped_log, stopped_log
+                    print("PASS: Stop request ran Uvicorn shutdown and exited successfully")
                     try:
                         opener.open(url + "/version", timeout=2)
                     except OSError:

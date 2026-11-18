@@ -1,11 +1,14 @@
 import importlib.util
+import io
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
 import tempfile
+import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location("manage", Path(__file__).parents[1] / "scripts/manage.py")
 manage = importlib.util.module_from_spec(spec)
@@ -49,6 +52,51 @@ class SetupTests(unittest.TestCase):
             occupied.listen()
             preferred = occupied.getsockname()[1]
             self.assertNotEqual(manage.available_port(preferred), preferred)
+
+    def test_readiness_requires_pixlstash_api_and_html(self):
+        opener = Mock()
+        opener.open.side_effect = [io.BytesIO(b'{"status": "ok"}')]
+        self.assertFalse(manage.webui_responds(opener, "http://127.0.0.1:9537"))
+        self.assertEqual(opener.open.call_count, 1)
+        for page, expected in [(b"loading", False), (b"<html>PixlStash</html>", True)]:
+            api = io.BytesIO(b'{"message": "PixlStash REST API"}')
+            html = io.BytesIO(page)
+            html.status = 200
+            opener.open.side_effect = [api, html]
+            self.assertEqual(manage.webui_responds(opener, "http://127.0.0.1:9537"), expected)
+
+    def test_readiness_timeout_reports_failure_and_interrupts_server(self):
+        finished, ready, stopping, timed_out = (threading.Event() for _ in range(4))
+        with patch.object(manage, "READINESS_TIMEOUT", 0), patch.object(manage, "report_fatal") as report, \
+                patch.object(manage._thread, "interrupt_main") as interrupt:
+            manage.watch_server(9537, self.root / "no-stop", finished, ready, stopping, timed_out)
+        report.assert_called_once()
+        self.assertIn("readiness timed out", report.call_args.args[0])
+        interrupt.assert_called_once()
+        self.assertTrue(timed_out.is_set())
+        self.assertFalse(stopping.is_set())
+        self.assertFalse(ready.is_set())
+
+    def test_process_exit_reports_startup_failure_or_unexpected_exit(self):
+        manage.write_json(manage.MARKER, {"backend": "cpu"})
+        for online, status, message in [
+            (False, 1, "initialization failed"),
+            (True, 0, "server exited unexpectedly"),
+        ]:
+            with self.subTest(online=online):
+                def watch(_port, _stop_file, _finished, ready, _stopping, _timed_out):
+                    if online:
+                        ready.set()
+
+                with patch.object(manage, "watch_server", side_effect=watch), \
+                        patch.object(manage.runpy, "run_module", side_effect=SystemExit(status)), \
+                        patch.object(manage, "report_fatal") as report, \
+                        patch.object(manage.sys, "argv", []), patch.dict(os.environ), \
+                        self.assertRaises(SystemExit) as exit_:
+                    manage.serve()
+                self.assertEqual(exit_.exception.code, manage.SERVER_FAILURE)
+                self.assertIn(message, report.call_args.args[0])
+                self.assertFalse((manage.DATA / "server-session.json").exists())
 
     def test_install_refuses_global_python(self):
         with self.assertRaisesRegex(RuntimeError, "virtual environment"):
