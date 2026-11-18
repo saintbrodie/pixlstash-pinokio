@@ -1,7 +1,7 @@
 module.exports = {
   version: "3.0",
   title: "PixlStash",
-  description: "Local image library with AI tagging, search and ComfyUI integration. CPU by default; optional NVIDIA acceleration.",
+  description: "Self-hosted image manager for photographers and AI creators. Search by meaning, tag and caption images, train LoRAs from your library, and run ComfyUI workflows.",
   icon: "icon.svg",
   requires: [{ name: "node" }, { name: "uv" }],
   menu: async (kernel, info) => {
@@ -16,7 +16,7 @@ module.exports = {
         stop
       ];
       return [
-        { default: true, icon: "fa-solid fa-globe", text: "Open WebUI", href: local.url },
+        { icon: "fa-solid fa-globe", text: "Open WebUI", href: local.url, popout: true },
         { icon: "fa-solid fa-terminal", text: "Server Log", href: "start.js" },
         stop
       ];

@@ -25,7 +25,7 @@ test("completed installation offers manual Start and maintenance actions", async
   assert.ok(stopped.every(item => !item.default));
 });
 
-test("starting has no WebUI link; readiness supplies captured URL and Stop", async () => {
+test("readiness offers the captured URL in an external browser and keeps Stop available", async () => {
   const starting = await launcher.menu({}, info({ installed: true, running: ["start.js"] }));
   assert.deepEqual(starting.map(item => item.href), ["start.js", "stop.js"]);
   assert.ok(starting.every(item => !item.default));
@@ -33,8 +33,8 @@ test("starting has no WebUI link; readiness supplies captured URL and Stop", asy
   const url = "http://127.0.0.1:49281";
   const online = await launcher.menu({}, info({ running: ["start.js"], url }));
   assert.deepEqual(online.map(item => item.href), [url, "start.js", "stop.js"]);
-  assert.equal(online[0].default, true);
-  assert.ok(online.slice(1).every(item => !item.default));
+  assert.equal(online[0].popout, true);
+  assert.ok(online.every(item => !item.default));
 });
 
 test("mutating actions hide competing actions while working", async () => {

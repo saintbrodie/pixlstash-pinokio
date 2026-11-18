@@ -1,6 +1,15 @@
 # PixlStash for Pinokio
 
-Windows-first Pinokio launcher for [PixlStash](https://github.com/Pikselkroken/pixlstash), a local image library with AI search, tagging and ComfyUI integration. Installs the published Python wheel, including its built WebUI; no frontend build, Docker, system Python or standalone PixlStash installer is needed.
+PixlStash is a self-hosted image manager for photographers and AI creators. Use it to organize large libraries, find images by meaning, prepare LoRA training sets, and reuse the ComfyUI workflows that produced your images. AI processing runs on your hardware. [Official PixlStash site](https://pikselkroken.github.io/pixlstash/)
+
+## What you can do
+
+- **Find images** with CLIP semantic search, face recognition, and text extracted from pictures.
+- **Curate your library** with automatic tags and captions, image quality and anomaly scores, and a queue for reviewing AI labels. [PixlStash AI features](https://pikselkroken.github.io/pixlstash/ai.html)
+- **Develop LoRAs from your library** by curating an image set and reviewing its tags and captions. Select a person or set and choose **Train LoRA**. PixlStash attaches the trained adapter to that person or set when the run finishes. [PixlStash 2.0 release notes](https://pikselkroken.github.io/pixlstash/whatsnew.html)
+- **Reuse ComfyUI workflows** by collecting them from your images and running them from your library. [ComfyUI integration](https://pikselkroken.github.io/pixlstash/comfyui.html)
+
+This Windows-first Pinokio launcher installs the published PixlStash 2.0.1 Python package and its bundled WebUI in a private environment. The official site tracks upstream releases and may describe features added after this version.
 
 ## Install and run
 
@@ -8,7 +17,9 @@ Choose a launcher action to run it. Opening PixlStash in Pinokio leaves installa
 
 1. In Pinokio, choose **Download** and enter `https://github.com/saintbrodie/pixlstash-pinokio`.
 2. Open the downloaded app and choose **Install PixlStash (CPU)** or **Install PixlStash (NVIDIA CUDA 13)**. Allow Pinokio to install its required Node and uv tools if prompted.
-3. Choose **Start** to see startup progress. When **Open WebUI** appears, open it and complete PixlStash's initial account setup.
+3. Choose **Start** to see startup progress. When **Open WebUI** appears, select it to open PixlStash in your default browser. Complete initial account setup there.
+
+Use the browser opened by **Open WebUI** for sign-in. Pinokio's embedded view can block the session cookie when it loads PixlStash across sites, which sends you back to the sign-in page.
 
 The first install downloads a private, managed Python 3.12 and the Python dependencies. First startup/inference can also download several GB of AI models and take time. Internet access and sufficient free disk space are required. Windows x64 is the validated target; macOS, Linux, AMD and Intel GPU acceleration have not been validated.
 
@@ -24,7 +35,7 @@ If startup ends early or the server exits unexpectedly, Pinokio returns to the s
 
 PixlStash is currently pinned to **2.0.1**. Updates adopt newer application releases when the launcher's requirements are updated and tested, rather than silently tracking untested PyPI releases. Local conflicting edits or diverged Git history cause Update to stop with an error. Logs remain available in Pinokio.
 
-To apply the startup fix to an existing installation, stop PixlStash and run `git pull --ff-only` from the downloaded launcher folder on its `main` branch. Then reload the app in Pinokio and select **Start**. This updates the launcher code with the existing Python environment, library, and models in place.
+For launcher-only updates, stop PixlStash and run `git pull --ff-only` from the launcher folder on its `main` branch. Reload the app in Pinokio and select **Start**. Your Python environment, library, and downloaded models stay in place.
 
 ## Check the server API
 
